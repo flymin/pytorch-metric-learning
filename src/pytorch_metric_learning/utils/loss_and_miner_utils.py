@@ -190,6 +190,8 @@ def convert_to_triplets(indices_tuple, labels, t_per_anchor=100):
             return get_random_triplet_indices(labels, t_per_anchor=t_per_anchor)
     elif len(indices_tuple) == 3:
         return indices_tuple
+    elif len(indices_tuple) == 4:
+        return indices_tuple
     else:
         a_out, p_out, n_out = [], [], []
         a1, p, a2, n = indices_tuple
