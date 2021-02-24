@@ -67,7 +67,7 @@ def get_my_triplets_indices(labels, ref_labels=None):
     y = labels[:len(labels)//3]
     wrong_y = labels[-len(labels)//3:]
     # an and ap here are symmetric
-    an = (y.unsqueeze(0) != wrong_y.unsqueeze(1)).byte()
+    an = (y.unsqueeze(1) != wrong_y.unsqueeze(0)).byte()
     ap = torch.eye(len(y), len(y)).byte().to(an.device)
     triplets = ap.unsqueeze(2) * an.unsqueeze(1)
     return torch.where(triplets)
