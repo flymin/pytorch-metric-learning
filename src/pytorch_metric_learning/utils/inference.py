@@ -44,8 +44,8 @@ class MatchFinder:
                 dist >= threshold if self.distance.is_inverted else dist <= threshold
             )
             if output.nelement() == 1:
-                return output.detach().item()
-            return output.cpu().numpy()
+                return output.detach().item(), dist.detach().item()
+            return output.cpu().numpy(), dist.cpu().numpy()
 
 
 class FaissIndexer:
