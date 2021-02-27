@@ -61,6 +61,64 @@ class TripletMarginMiner(BaseTupleMiner):
                 self.avg_triplet_margin = torch.mean(triplet_margin).item()
 
 
+def get_2_triplets_indices(labels, ref_labels=None):
+    if ref_labels is None:
+        ref_labels = labels
+    labels1 = labels.unsqueeze(1)
+    labels2 = ref_labels.unsqueeze(0)
+    matches = (labels1 == labels2).byte()
+    diffs = matches ^ 1
+    matches = torch.logical_and(matches, labels1 == 0).byte()
+    matches = torch.logical_and(matches, labels2 == 0).byte()
+    if ref_labels is labels:
+        matches.fill_diagonal_(0)
+    triplets = matches.unsqueeze(2) * diffs.unsqueeze(1)
+    return torch.where(triplets)
+
+
+class TripletMarginMiner2(TripletMarginMiner):
+    """
+    Returns triplets that violate the margin
+    Args:
+        margin
+        type_of_triplets: options are "all", "hard", or "semihard".
+                "all" means all triplets that violate the margin
+                "hard" is a subset of "all", but the negative is closer to the anchor than the positive
+                "semihard" is a subset of "all", but the negative is further from the anchor than the positive
+            "easy" is all triplets that are not in "all"
+    """
+
+    def __init__(self, margin=0.2, type_of_triplets="all", **kwargs):
+        super().__init__(margin=margin, type_of_triplets=type_of_triplets, **kwargs)
+        print(">>>> using flymin's version for 2 classes miner <<<<")
+
+    def mine(self, embeddings, labels, ref_emb, ref_labels):
+        anchor_idx, positive_idx, negative_idx = get_2_triplets_indices(
+            labels, ref_labels
+        )
+        mat = self.distance(embeddings, ref_emb)
+        ap_dist = mat[anchor_idx, positive_idx]
+        an_dist = mat[anchor_idx, negative_idx]
+        triplet_margin = (
+            ap_dist - an_dist
+            if self.distance.is_inverted else an_dist - ap_dist)
+
+        if self.type_of_triplets == "easy":
+            threshold_condition = triplet_margin > self.margin
+        else:
+            threshold_condition = triplet_margin <= self.margin
+            if self.type_of_triplets == "hard":
+                threshold_condition &= triplet_margin <= 0
+            elif self.type_of_triplets == "semihard":
+                threshold_condition &= triplet_margin > 0
+
+        return (
+            anchor_idx[threshold_condition],
+            positive_idx[threshold_condition],
+            negative_idx[threshold_condition],
+        )
+
+
 def get_my_triplets_indices(labels, ref_labels=None):
     if ref_labels is None:
         ref_labels = labels
@@ -106,6 +164,7 @@ class MyTripletMarginMiner(TripletMarginMiner):
             negative_idx[threshold_condition],
         )
 
+
 def get_myNN_triplets_indices(labels, ref_labels=None):
     N = len(labels) // 11
     y = labels[:N]
@@ -114,6 +173,7 @@ def get_myNN_triplets_indices(labels, ref_labels=None):
     ap = torch.eye(len(y), len(y)).byte().to(an.device)
     triplets = ap.unsqueeze(2) * an.unsqueeze(1)
     return torch.where(triplets)
+
 
 class MyNNTripletMarginMiner(TripletMarginMiner):
     def __init__(self, margin, type_of_triplets, **kwargs):
