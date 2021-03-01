@@ -44,8 +44,8 @@ class MatchFinder:
                 dist >= threshold if self.distance.is_inverted else dist <= threshold
             )
             if output.nelement() == 1:
-                return output.detach().item()
-            return output.cpu().numpy()
+                return output.detach().item(), dist.detach().item()
+            return output.cpu().numpy(), dist.cpu().numpy()
 
 
 class FaissIndexer:
@@ -88,8 +88,8 @@ class InferenceModel:
         self.batch_size = batch_size
 
     def train_indexer(self, tensors, emb_dim):
-        if isinstance(tensors, list):
-            tensors = torch.stack(tensors)
+        # if isinstance(tensors, list):
+        #     tensors = torch.stack(tensors)
 
         embeddings = torch.Tensor(len(tensors), emb_dim)
         for i in range(0, len(tensors), self.batch_size):
@@ -109,8 +109,31 @@ class InferenceModel:
         return indices, distances
 
     def get_embeddings(self, query, ref):
+        # if isinstance(query, list):
+        #     query = torch.stack(query)
         if isinstance(query, list):
-            query = torch.stack(query)
+            ori_data = query
+            data = (
+                torch.stack(
+                    [ori_data[i][0] for i in range(len(ori_data))]
+                ).cuda(), 
+                torch.LongTensor(
+                    [ori_data[i][1] for i in range(len(ori_data))]
+                ).cuda()
+            )
+            query = data
+        if isinstance(ref, list):
+            ori_data = ref
+            data = (
+                torch.stack(
+                    [ori_data[i][0] for i in range(len(ori_data))]
+                ).cuda(), 
+                torch.LongTensor(
+                    [ori_data[i][1] for i in range(len(ori_data))]
+                ).cuda()
+            )
+            ref = data
+
 
         self.trunk.eval()
         self.embedder.eval()
