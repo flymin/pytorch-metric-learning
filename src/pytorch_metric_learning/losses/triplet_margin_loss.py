@@ -103,3 +103,46 @@ class MyNNTripletMarginLoss(TripletMarginLoss):
                 "reduction_type": "triplet",
             }
         }
+
+class MyNNTripletMarginLossV2(TripletMarginLoss):
+    def __init__(
+        self,
+        margin=0.05,
+        swap=False,
+        smooth_loss=False,
+        triplets_per_anchor="all",
+        **kwargs
+    ):
+        super().__init__(margin=margin, swap=swap, smooth_loss=smooth_loss, triplets_per_anchor=triplets_per_anchor, **kwargs)
+        print(">>>> using flymin's version for n->n triplet loss V2 <<<<")
+    
+    def compute_loss(self, embeddings, labels, indices_tuple):
+        indices_tuple = lmu.convert_to_triplets(
+            indices_tuple, labels, t_per_anchor=self.triplets_per_anchor
+        )
+        anchor_idx, positive_idx, negative_idx = indices_tuple
+        if len(anchor_idx) == 0:
+            return self.zero_losses()
+        assert len(embeddings) % 11 == 0
+        N = len(embeddings) // 11
+        # pos_mat should have size N x N
+        pos_mat = self.distance(embeddings[:N], embeddings[N:2*N])
+        # neg_mat should have size N x 9N
+        neg_mat = self.distance(embeddings[:N], embeddings[2*N:])
+        ap_dists = pos_mat[anchor_idx[:,0], positive_idx]
+        an_dists = neg_mat[anchor_idx[:,1], negative_idx]
+        assert self.swap is False
+
+        current_margins = self.distance.margin(an_dists, ap_dists)
+        if self.smooth_loss:
+            loss = torch.log(1 + torch.exp(-current_margins))
+        else:
+            loss = torch.nn.functional.relu(-current_margins + self.margin)
+
+        return {
+            "loss": {
+                "losses": loss,
+                "indices": indices_tuple,
+                "reduction_type": "triplet",
+            }
+        }

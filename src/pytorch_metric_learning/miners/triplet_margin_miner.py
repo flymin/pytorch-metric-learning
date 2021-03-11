@@ -222,3 +222,76 @@ class MyNNTripletMarginMiner(TripletMarginMiner):
             positive_idx[threshold_condition],
             negative_idx[threshold_condition],
         )
+
+
+def get_myNN_triplets_indicesV2(labels, ref_labels=None):
+    N = len(labels) // 11
+    y = labels[:N]
+    wrong_y = labels[-N*9:]
+    an = (y.unsqueeze(1) != wrong_y.unsqueeze(0)).byte()
+    anc2_o, negative_o = torch.where(an)
+    anc1_o = torch.zeros_like(anc2_o).to(an.device)
+    pos_o = torch.zeros_like(anc2_o).to(an.device)
+    positive_idx, anc1, anc2, negative_idx = [], [], [], []
+    for _ in range(len(y)):
+        anc1.append(anc1_o.clone())
+        anc1_o += 1
+        positive_idx.append(pos_o.clone())
+        pos_o += 1
+        anc2.append(anc2_o)
+        negative_idx.append(negative_o)
+    positive_idx = torch.cat(positive_idx, dim=0).to(an.device)
+    negative_idx = torch.cat(negative_idx, dim=0).to(an.device)
+    anc1 = torch.cat(anc1, dim=0)
+    anc2 = torch.cat(anc2, dim=0)
+    anchor_idx = torch.stack([anc1, anc2], dim=1).to(an.device)
+    return anchor_idx, positive_idx, negative_idx
+
+
+class MyNNTripletMarginMinerV2(TripletMarginMiner):
+    def __init__(self, margin, type_of_triplets, **kwargs):
+        super().__init__(margin=margin, type_of_triplets=type_of_triplets, **kwargs)
+        print(">>>> using flymin's version for n->n triplet miner V2 <<<<")
+
+    def mine(self, embeddings, labels, ref_emb, ref_labels):
+        """Generate pos pair and neg pair
+
+        Args:
+            For every batch size = N inputs
+            embeddings (4D Tensor): N + N + 9N for ori + y_gen + wrong_y_gen
+            labels (1D Tensor): N + N + 9N for y + y + wrong_y
+            ref_emb ([type]): embeddings
+            ref_labels ([type]): labels
+
+        Returns:
+            tuple of anchor_idx, positive_idx, negative_idx
+        """
+        anchor_idx, positive_idx, negative_idx = get_myNN_triplets_indicesV2(
+            labels, ref_labels
+        )
+        assert len(embeddings) % 11 == 0
+        N = len(embeddings) // 11
+        # pos_mat should have size N x N
+        pos_mat = self.distance(embeddings[:N], ref_emb[N:2*N])
+        # neg_mat should have size N x 9N
+        neg_mat = self.distance(embeddings[:N], ref_emb[2*N:])
+        ap_dist = pos_mat[anchor_idx[:, 0], positive_idx]
+        an_dist = neg_mat[anchor_idx[:, 1], negative_idx]
+        triplet_margin = (
+            ap_dist - an_dist
+            if self.distance.is_inverted else an_dist - ap_dist)
+
+        if self.type_of_triplets == "easy":
+            threshold_condition = triplet_margin > self.margin
+        else:
+            threshold_condition = triplet_margin <= self.margin
+            if self.type_of_triplets == "hard":
+                threshold_condition &= triplet_margin <= 0
+            elif self.type_of_triplets == "semihard":
+                threshold_condition &= triplet_margin > 0
+
+        return (
+            anchor_idx[threshold_condition],
+            positive_idx[threshold_condition],
+            negative_idx[threshold_condition],
+        )
