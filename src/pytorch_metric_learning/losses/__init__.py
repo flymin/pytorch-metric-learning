@@ -22,5 +22,5 @@ from .proxy_losses import ProxyNCALoss
 from .signal_to_noise_ratio_losses import SignalToNoiseRatioContrastiveLoss
 from .soft_triple_loss import SoftTripleLoss
 from .sphereface_loss import SphereFaceLoss
-from .triplet_margin_loss import TripletMarginLoss, MyLabelTripletMarginLoss, MyLabelNNTripletMarginLoss
+from .triplet_margin_loss import TripletMarginLoss, MyLabelTripletMarginLoss, MyLabelNNTripletMarginLoss, LwTripletMarginLoss
 from .tuplet_margin_loss import TupletMarginLoss

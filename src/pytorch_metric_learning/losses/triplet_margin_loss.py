@@ -63,6 +63,48 @@ class TripletMarginLoss(BaseMetricLossFunction):
         return AvgNonZeroReducer()
 
 
+class LwTripletMarginLoss(TripletMarginLoss):
+    def __init__(self, margin=0.05, swap=False, smooth_loss=False,
+                 triplets_per_anchor='all', **kwargs):
+        super().__init__(margin=margin, swap=swap, smooth_loss=smooth_loss,
+                         triplets_per_anchor=triplets_per_anchor, **kwargs)
+        print(">>>> using flymin's version for Lw triplet loss <<<<")
+
+    def compute_loss(self, embeddings, labels, indices_tuple):
+        indices_tuple = lmu.convert_to_triplets(
+            indices_tuple, labels, t_per_anchor=self.triplets_per_anchor
+        )
+        anchor_idx, positive_idx, negative_idx = indices_tuple
+        if len(anchor_idx) == 0:
+            return self.zero_losses()
+        mat_cls = self.distance(
+            embeddings[: -len(labels) // 3],
+            embeddings[: -len(labels) // 3])
+        mat_pn = self.distance(
+            embeddings[: -len(labels) // 3],
+            embeddings[-len(labels) // 3:])
+        ap_dists = mat_cls[anchor_idx, positive_idx]
+        an_dists = mat_cls[anchor_idx, negative_idx]
+
+        pn_dists = mat_pn[anchor_idx, anchor_idx % (len(labels) // 3)]
+        an_dists += pn_dists
+        assert self.swap == False
+
+        current_margins = self.distance.margin(an_dists, ap_dists)
+        if self.smooth_loss:
+            loss = torch.log(1 + torch.exp(-current_margins))
+        else:
+            loss = torch.nn.functional.relu(-current_margins + self.margin)
+
+        return {
+            "loss": {
+                "losses": loss,
+                "indices": indices_tuple,
+                "reduction_type": "triplet",
+            }
+        }
+
+
 class MyLabelTripletMarginLoss(TripletMarginLoss):
     def __init__(self, margin=0.05, swap=False, smooth_loss=False,
                  triplets_per_anchor='all', **kwargs):
